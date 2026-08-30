@@ -1,5 +1,159 @@
 import { downloadIcon, linkIcon, refreshIcon, closeIcon, validIcon, invalidIcon } from './icon.js';
 
+// General-education category matching is adapted from the MIT-licensed
+// pku-elective-general-edu-course-sorter by meravChen (Copyright 2026).
+const GENERAL_EDUCATION_SERIES = [
+    { label: '一', number: 'I', tip: '人类文明及其传统' },
+    { label: '二', number: 'II', tip: '现代社会及其问题' },
+    { label: '三', number: 'III', tip: '人文与自然' },
+    { label: '四', number: 'IV', tip: '数学与逻辑' },
+];
+
+function getGeneralEducationSeries(categoryText) {
+    const text = categoryText.trim();
+    if (!/(通识课|通识核心课|通选课)/.test(text)) {
+        return null;
+    }
+
+    const series = GENERAL_EDUCATION_SERIES.find(({ number }) =>
+        new RegExp(`(?:通识核心课|通选课)${number}(?![IVX])`).test(text),
+    );
+    return series ? series.label : '未区分';
+}
+
+function matchesGeneralEducationFilter(categoryText, filterKey) {
+    if (filterKey === 'all') {
+        return true;
+    }
+
+    const series = getGeneralEducationSeries(categoryText);
+    return filterKey === 'allTsk' ? series !== null : series === filterKey;
+}
+
+function getGeneralEducationFilterCounts(categoryTexts) {
+    const counts = { all: categoryTexts.length, allTsk: 0, 一: 0, 二: 0, 三: 0, 四: 0, 未区分: 0 };
+    categoryTexts.forEach((categoryText) => {
+        const series = getGeneralEducationSeries(categoryText);
+        if (series === null) {
+            return;
+        }
+        counts.allTsk += 1;
+        counts[series] += 1;
+    });
+    return counts;
+}
+
+const GENERAL_EDUCATION_FILTER_STORAGE_KEY = 'pkuArtGeneralEducationFilter.selected';
+const GENERAL_EDUCATION_FILTERS = [
+    { key: 'all', label: '全部' },
+    { key: 'allTsk', label: '通识课' },
+    ...GENERAL_EDUCATION_SERIES,
+    { key: '未区分', label: '未区分', tip: '未标注系列的通识课' },
+];
+
+function getGeneralEducationTableMetadata() {
+    return [...document.querySelectorAll('table.datagrid')]
+        .map((table) => {
+            const headers = [...table.querySelectorAll('tr.datagrid-header th')];
+            const categoryColumnIndex = headers.findIndex((header) => header.textContent.trim() === '课程类别');
+            if (categoryColumnIndex === -1) {
+                return null;
+            }
+            const rows = [...table.querySelectorAll('tr.datagrid-even, tr.datagrid-odd')];
+            return { table, categoryColumnIndex, rows };
+        })
+        .filter(Boolean);
+}
+
+function getCourseCategory(row, categoryColumnIndex) {
+    return row.children[categoryColumnIndex]?.textContent.trim() ?? '';
+}
+
+function initializeGeneralEducationCourseFilter() {
+    const initialize = () => {
+        if (document.getElementById('pku-art-general-education-filter')) {
+            return;
+        }
+
+        const tables = getGeneralEducationTableMetadata();
+        if (tables.length === 0) {
+            return;
+        }
+
+        const categories = tables.flatMap(({ rows, categoryColumnIndex }) =>
+            rows.map((row) => getCourseCategory(row, categoryColumnIndex)),
+        );
+        const counts = getGeneralEducationFilterCounts(categories);
+        const filterBar = document.createElement('section');
+        filterBar.id = 'pku-art-general-education-filter';
+        filterBar.className = 'PKU-Art pku-art-general-education-filter';
+        filterBar.setAttribute('aria-label', '通识课筛选');
+
+        const title = document.createElement('strong');
+        title.className = 'pku-art-general-education-filter__title';
+        title.textContent = '通识课筛选';
+        filterBar.appendChild(title);
+
+        const controls = document.createElement('div');
+        controls.className = 'pku-art-general-education-filter__controls';
+        filterBar.appendChild(controls);
+
+        const setFilter = (filterKey) => {
+            tables.forEach(({ rows, categoryColumnIndex }) => {
+                rows.forEach((row) => {
+                    row.hidden = !matchesGeneralEducationFilter(getCourseCategory(row, categoryColumnIndex), filterKey);
+                });
+            });
+            controls.querySelectorAll('button').forEach((button) => {
+                const isActive = button.dataset.filterKey === filterKey;
+                button.classList.toggle('is-active', isActive);
+                button.setAttribute('aria-pressed', String(isActive));
+            });
+            try {
+                sessionStorage.setItem(GENERAL_EDUCATION_FILTER_STORAGE_KEY, filterKey);
+            } catch (error) {
+                console.warn('[PKU Art] 无法保存通识课筛选状态', error);
+            }
+        };
+
+        GENERAL_EDUCATION_FILTERS.forEach(({ key, label, tip }) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'pku-art-general-education-filter__button';
+            button.dataset.filterKey = key;
+            button.textContent = `${label} (${counts[key]})`;
+            if (tip) {
+                button.title = tip;
+            }
+            if (counts[key] === 0 && key !== 'all') {
+                button.classList.add('is-empty');
+            }
+            button.addEventListener('click', () => setFilter(key));
+            controls.appendChild(button);
+        });
+
+        const description = document.createElement('span');
+        description.className = 'pku-art-general-education-filter__description';
+        description.textContent = '仅筛选当前页课程；翻页后会保留选择。';
+        filterBar.appendChild(description);
+        tables[0].table.before(filterBar);
+
+        try {
+            const savedFilter = sessionStorage.getItem(GENERAL_EDUCATION_FILTER_STORAGE_KEY);
+            if (GENERAL_EDUCATION_FILTERS.some(({ key }) => key === savedFilter)) {
+                setFilter(savedFilter);
+                return;
+            }
+        } catch (error) {
+            console.warn('[PKU Art] 无法读取通识课筛选状态', error);
+        }
+        setFilter('all');
+    };
+
+    initialize();
+    document.addEventListener('DOMContentLoaded', initialize, { once: true });
+}
+
 /**
  * Logo 导航功能 - 点击导航区域左侧 150px 以内，且在导航区域顶部 60px 以内（Logo）时跳转到首页
  * 仅在 course.pku.edu.cn/elective.pku.edu.cn 域名下生效
@@ -1607,6 +1761,10 @@ function initializeBatchDownload() {
 }
 
 export {
+    getGeneralEducationFilterCounts,
+    getGeneralEducationSeries,
+    matchesGeneralEducationFilter,
+    initializeGeneralEducationCourseFilter,
     initializeLogoNavigation,
     ensureSidebarVisible,
     overrideSiteIcons,
