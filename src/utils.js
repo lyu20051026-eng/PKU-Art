@@ -3,10 +3,10 @@ import { downloadIcon, linkIcon, refreshIcon, closeIcon, validIcon, invalidIcon 
 // General-education category matching is adapted from the MIT-licensed
 // pku-elective-general-edu-course-sorter by meravChen (Copyright 2026).
 const GENERAL_EDUCATION_SERIES = [
-    { label: '一', number: 'I', tip: '人类文明及其传统' },
-    { label: '二', number: 'II', tip: '现代社会及其问题' },
-    { label: '三', number: 'III', tip: '人文与自然' },
-    { label: '四', number: 'IV', tip: '数学与逻辑' },
+    { key: '一', label: '一', number: 'I', tip: '人类文明及其传统' },
+    { key: '二', label: '二', number: 'II', tip: '现代社会及其问题' },
+    { key: '三', label: '三', number: 'III', tip: '人文与自然' },
+    { key: '四', label: '四', number: 'IV', tip: '数学与逻辑' },
 ];
 
 function getGeneralEducationSeries(categoryText) {
@@ -50,6 +50,10 @@ const GENERAL_EDUCATION_FILTERS = [
     ...GENERAL_EDUCATION_SERIES,
     { key: '未区分', label: '未区分', tip: '未标注系列的通识课' },
 ];
+
+function getGeneralEducationFilterDefinitions() {
+    return GENERAL_EDUCATION_FILTERS;
+}
 
 function getGeneralEducationTableMetadata() {
     return [...document.querySelectorAll('table.datagrid')]
@@ -1762,6 +1766,7 @@ function initializeBatchDownload() {
 
 export {
     getGeneralEducationFilterCounts,
+    getGeneralEducationFilterDefinitions,
     getGeneralEducationSeries,
     matchesGeneralEducationFilter,
     initializeGeneralEducationCourseFilter,
