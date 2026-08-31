@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    buildGeneralEducationPaginationUrls,
     getGeneralEducationFilterCounts,
     getGeneralEducationFilterDefinitions,
     getGeneralEducationSeries,
+    isGeneralEducationCourseQueryResultUrl,
     matchesGeneralEducationFilter,
 } from '../src/utils.js';
 
@@ -48,5 +50,35 @@ test('defines a count key for every series button', () => {
             ['四', '四'],
             ['未区分', '未区分'],
         ],
+    );
+});
+
+test('builds every result-page URL from the query form offsets', () => {
+    assert.deepEqual(
+        buildGeneralEducationPaginationUrls(
+            'queryCurriculum.jsp',
+            'https://elective.pku.edu.cn/elective2008/edu/pku/stu/elective/controller/courseQuery/getCurriculmByForm.do',
+            [['semester', '20261']],
+            ['syllabusListGrid;0', 'syllabusListGrid;100'],
+        ),
+        [
+            'https://elective.pku.edu.cn/elective2008/edu/pku/stu/elective/controller/courseQuery/queryCurriculum.jsp?semester=20261&netui_row=syllabusListGrid%3B0',
+            'https://elective.pku.edu.cn/elective2008/edu/pku/stu/elective/controller/courseQuery/queryCurriculum.jsp?semester=20261&netui_row=syllabusListGrid%3B100',
+        ],
+    );
+});
+
+test('limits the filter to course query result pages', () => {
+    assert.equal(
+        isGeneralEducationCourseQueryResultUrl(
+            'https://elective.pku.edu.cn/elective2008/edu/pku/stu/elective/controller/courseQuery/getCurriculmByForm.do',
+        ),
+        true,
+    );
+    assert.equal(
+        isGeneralEducationCourseQueryResultUrl(
+            'https://elective.pku.edu.cn/elective2008/edu/pku/stu/elective/controller/electivePlan/ElectivePlanController.jpf',
+        ),
+        false,
     );
 });
