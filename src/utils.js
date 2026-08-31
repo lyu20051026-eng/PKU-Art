@@ -44,6 +44,7 @@ function getGeneralEducationFilterCounts(categoryTexts) {
 }
 
 const GENERAL_EDUCATION_FILTER_STORAGE_KEY = 'pkuArtGeneralEducationFilter.selected';
+const GENERAL_EDUCATION_FILTER_ENABLED_STORAGE_KEY = 'pkuArtGeneralEducationFilter.enabled';
 const GENERAL_EDUCATION_FILTERS = [
     { key: 'all', label: '全部' },
     { key: 'allTsk', label: '通识课' },
@@ -55,8 +56,25 @@ function getGeneralEducationFilterDefinitions() {
     return GENERAL_EDUCATION_FILTERS;
 }
 
-function getGeneralEducationTableMetadata() {
-    return [...document.querySelectorAll('table.datagrid')]
+function buildGeneralEducationPaginationUrls(action, baseUrl, formEntries, offsets) {
+    const actionUrl = new URL(action, baseUrl);
+    return offsets.map((offset) => {
+        const pageUrl = new URL(actionUrl);
+        const parameters = new URLSearchParams(formEntries);
+        parameters.set('netui_row', offset);
+        pageUrl.search = parameters.toString();
+        return pageUrl.toString();
+    });
+}
+
+function isGeneralEducationCourseQueryResultUrl(url) {
+    return /^https:\/\/elective\.pku\.edu\.cn\/elective2008\/edu\/pku\/stu\/elective\/controller\/courseQuery\/(getCurriculmByForm\.do|queryCurriculum\.jsp)/.test(
+        url,
+    );
+}
+
+function getGeneralEducationTableMetadata(root = document) {
+    return [...root.querySelectorAll('table.datagrid')]
         .map((table) => {
             const headers = [...table.querySelectorAll('tr.datagrid-header th')];
             const categoryColumnIndex = headers.findIndex((header) => header.textContent.trim() === '课程类别');
@@ -73,8 +91,89 @@ function getCourseCategory(row, categoryColumnIndex) {
     return row.children[categoryColumnIndex]?.textContent.trim() ?? '';
 }
 
+function getGeneralEducationCategories(root = document) {
+    return getGeneralEducationTableMetadata(root).flatMap(({ rows, categoryColumnIndex }) =>
+        rows.map((row) => getCourseCategory(row, categoryColumnIndex)),
+    );
+}
+
+function getGeneralEducationPaginationUrls(pageForm) {
+    const offsets = [...pageForm.querySelectorAll('select[name="netui_row"] option[value]')].map((option) => option.value);
+    if (offsets.length === 0) {
+        return [];
+    }
+    return buildGeneralEducationPaginationUrls(
+        pageForm.getAttribute('action') || window.location.href,
+        window.location.href,
+        [...new FormData(pageForm).entries()],
+        offsets,
+    );
+}
+
+async function getAllGeneralEducationFilterCounts() {
+    const pageForm = document.querySelector('form[name="pageForm"]');
+    const currentPageCounts = getGeneralEducationFilterCounts(getGeneralEducationCategories());
+    if (!pageForm) {
+        return currentPageCounts;
+    }
+
+    const pageUrls = getGeneralEducationPaginationUrls(pageForm);
+    if (pageUrls.length === 0) {
+        return currentPageCounts;
+    }
+
+    const totalCounts = { all: 0, allTsk: 0, 一: 0, 二: 0, 三: 0, 四: 0, 未区分: 0 };
+    for (const pageUrl of pageUrls) {
+        const response = await fetch(pageUrl, { credentials: 'same-origin' });
+        if (!response.ok) {
+            throw new Error(`无法读取选课结果分页：${response.status}`);
+        }
+        const pageDocument = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const pageCounts = getGeneralEducationFilterCounts(getGeneralEducationCategories(pageDocument));
+        Object.keys(totalCounts).forEach((key) => {
+            totalCounts[key] += pageCounts[key];
+        });
+    }
+    return totalCounts;
+}
+
+function isGeneralEducationQuerySelected() {
+    const selectedCategory = document.querySelector('#kcfl input[type="radio"]:checked');
+    if (!selectedCategory) {
+        return false;
+    }
+    return selectedCategory.value === 'tsk_choice' || selectedCategory.parentElement?.textContent.includes('通识课');
+}
+
+function trackGeneralEducationQuerySelection() {
+    if (!/\/courseQuery\/CourseQueryController\.jpf$/.test(window.location.pathname)) {
+        return;
+    }
+    const categoryGroup = document.getElementById('kcfl');
+    if (!categoryGroup || categoryGroup.dataset.pkuArtGeneralEducationBound) {
+        return;
+    }
+    const saveSelection = () => {
+        sessionStorage.setItem(
+            GENERAL_EDUCATION_FILTER_ENABLED_STORAGE_KEY,
+            isGeneralEducationQuerySelected() ? 'true' : 'false',
+        );
+    };
+    saveSelection();
+    categoryGroup.addEventListener('change', saveSelection);
+    categoryGroup.dataset.pkuArtGeneralEducationBound = 'true';
+}
+
+function isGeneralEducationFilterEnabled() {
+    return sessionStorage.getItem(GENERAL_EDUCATION_FILTER_ENABLED_STORAGE_KEY) === 'true';
+}
+
 function initializeGeneralEducationCourseFilter() {
     const initialize = () => {
+        trackGeneralEducationQuerySelection();
+        if (!isGeneralEducationCourseQueryResultUrl(window.location.href)) {
+            return;
+        }
         if (document.getElementById('pku-art-general-education-filter')) {
             return;
         }
@@ -84,10 +183,8 @@ function initializeGeneralEducationCourseFilter() {
             return;
         }
 
-        const categories = tables.flatMap(({ rows, categoryColumnIndex }) =>
-            rows.map((row) => getCourseCategory(row, categoryColumnIndex)),
-        );
-        const counts = getGeneralEducationFilterCounts(categories);
+        const currentPageCounts = getGeneralEducationFilterCounts(getGeneralEducationCategories());
+        const filterEnabled = isGeneralEducationFilterEnabled();
         const filterBar = document.createElement('section');
         filterBar.id = 'pku-art-general-education-filter';
         filterBar.className = 'PKU-Art pku-art-general-education-filter';
@@ -103,6 +200,9 @@ function initializeGeneralEducationCourseFilter() {
         filterBar.appendChild(controls);
 
         const setFilter = (filterKey) => {
+            if (!filterEnabled) {
+                return;
+            }
             tables.forEach(({ rows, categoryColumnIndex }) => {
                 rows.forEach((row) => {
                     row.hidden = !matchesGeneralEducationFilter(getCourseCategory(row, categoryColumnIndex), filterKey);
@@ -120,38 +220,65 @@ function initializeGeneralEducationCourseFilter() {
             }
         };
 
+        const updateButtonCounts = (counts) => {
+            controls.querySelectorAll('button').forEach((button) => {
+                const filter = GENERAL_EDUCATION_FILTERS.find(({ key }) => key === button.dataset.filterKey);
+                button.textContent = `${filter.label} (${counts[filter.key]})`;
+                button.classList.toggle('is-empty', counts[filter.key] === 0 && filter.key !== 'all');
+            });
+        };
+
         GENERAL_EDUCATION_FILTERS.forEach(({ key, label, tip }) => {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'pku-art-general-education-filter__button';
             button.dataset.filterKey = key;
-            button.textContent = `${label} (${counts[key]})`;
+            button.textContent = `${label} (${filterEnabled ? '统计中…' : currentPageCounts[key]})`;
             if (tip) {
                 button.title = tip;
             }
-            if (counts[key] === 0 && key !== 'all') {
+            if (!filterEnabled || (currentPageCounts[key] === 0 && key !== 'all')) {
                 button.classList.add('is-empty');
             }
+            button.disabled = !filterEnabled;
             button.addEventListener('click', () => setFilter(key));
             controls.appendChild(button);
         });
 
         const description = document.createElement('span');
         description.className = 'pku-art-general-education-filter__description';
-        description.textContent = '仅筛选当前页课程；翻页后会保留选择。';
+        description.textContent = filterEnabled
+            ? '正在统计全部分页课程数量；筛选仅作用于当前页。'
+            : '仅适用于“通识课”查询条件；请返回查询页选择通识课后再使用。';
         filterBar.appendChild(description);
         tables[0].table.before(filterBar);
 
+        filterBar.classList.toggle('is-muted', !filterEnabled);
+
+        if (!filterEnabled) {
+            return;
+        }
+
+        let initialFilter = 'all';
         try {
             const savedFilter = sessionStorage.getItem(GENERAL_EDUCATION_FILTER_STORAGE_KEY);
             if (GENERAL_EDUCATION_FILTERS.some(({ key }) => key === savedFilter)) {
-                setFilter(savedFilter);
-                return;
+                initialFilter = savedFilter;
             }
         } catch (error) {
             console.warn('[PKU Art] 无法读取通识课筛选状态', error);
         }
-        setFilter('all');
+        setFilter(initialFilter);
+        getAllGeneralEducationFilterCounts()
+            .then((counts) => {
+                updateButtonCounts(counts);
+                description.textContent = '显示全部分页的课程数量；筛选仅作用于当前页。';
+            })
+            .catch((error) => {
+                console.warn('[PKU Art] 通识课全量统计失败', error);
+                updateButtonCounts(currentPageCounts);
+                description.textContent = '全量统计失败，当前显示本页数量；筛选仍可正常使用。';
+            });
     };
 
     initialize();
@@ -1765,9 +1892,11 @@ function initializeBatchDownload() {
 }
 
 export {
+    buildGeneralEducationPaginationUrls,
     getGeneralEducationFilterCounts,
     getGeneralEducationFilterDefinitions,
     getGeneralEducationSeries,
+    isGeneralEducationCourseQueryResultUrl,
     matchesGeneralEducationFilter,
     initializeGeneralEducationCourseFilter,
     initializeLogoNavigation,
