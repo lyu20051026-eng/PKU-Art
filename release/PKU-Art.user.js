@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PKU-Art
 // @namespace    arthals/pku-art
-// @version      2.6.27
+// @version      2.6.28
 // @author       Arthals
 // @description  给你一个足够好看的北大网站。
 // @license      GPL-3.0 license
@@ -770,10 +770,10 @@ patterns: [
   window.PKUArtThemeManager = new ThemeManager();
   const themeManager = window.PKUArtThemeManager;
   const GENERAL_EDUCATION_SERIES = [
-    { label: "一", number: "I", tip: "人类文明及其传统" },
-    { label: "二", number: "II", tip: "现代社会及其问题" },
-    { label: "三", number: "III", tip: "人文与自然" },
-    { label: "四", number: "IV", tip: "数学与逻辑" }
+    { key: "一", label: "一", number: "I", tip: "人类文明及其传统" },
+    { key: "二", label: "二", number: "II", tip: "现代社会及其问题" },
+    { key: "三", label: "三", number: "III", tip: "人文与自然" },
+    { key: "四", label: "四", number: "IV", tip: "数学与逻辑" }
   ];
   function getGeneralEducationSeries(categoryText) {
     const text = categoryText.trim();
