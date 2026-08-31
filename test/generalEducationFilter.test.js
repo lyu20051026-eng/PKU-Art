@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     getGeneralEducationFilterCounts,
+    getGeneralEducationFilterDefinitions,
     getGeneralEducationSeries,
     matchesGeneralEducationFilter,
 } from '../src/utils.js';
@@ -33,4 +34,19 @@ test('counts all filter categories for the current course page', () => {
         四: 1,
         未区分: 1,
     });
+});
+
+test('defines a count key for every series button', () => {
+    assert.deepEqual(
+        getGeneralEducationFilterDefinitions().map(({ key, label }) => [key, label]),
+        [
+            ['all', '全部'],
+            ['allTsk', '通识课'],
+            ['一', '一'],
+            ['二', '二'],
+            ['三', '三'],
+            ['四', '四'],
+            ['未区分', '未区分'],
+        ],
+    );
 });
