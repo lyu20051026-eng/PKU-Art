@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         PKU-Art
 // @namespace    arthals/pku-art
-// @version      2.6.29
+// @version      2.6.30
 // @author       Arthals
 // @description  给你一个足够好看的北大网站。
 // @license      GPL-3.0 license
 // @icon         http://cdn.arthals.ink/Arthals-mcskin.png
 // @supportURL   https://github.com/zhuozhiyongde/PKU-Art/issues
-// @downloadURL  https://cdn.arthals.ink/release/PKU-Art.user.js
-// @updateURL    https://cdn.arthals.ink/release/PKU-Art.user.js
+// @downloadURL  https://raw.githubusercontent.com/lyu20051026-eng/PKU-Art/feat/general-education-filter/release/PKU-Art.user.js
+// @updateURL    https://raw.githubusercontent.com/lyu20051026-eng/PKU-Art/feat/general-education-filter/release/PKU-Art.user.js
 // @match        *://*.pku.edu.cn/*
 // @connect      pku.edu.cn
 // @grant        GM_addValueChangeListener
